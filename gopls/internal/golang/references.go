@@ -571,11 +571,18 @@ func localReferences(pkg *cache.Package, targets map[types.Object]bool, correspo
 	// (We use a slice, but objectsAt never returns >1 methods.)
 	var methodRecvs []types.Type
 	var methodName string // name of an arbitrary target, iff a method
+	var methodStructType types.Type
+	var methodType types.Type
 	if correspond {
 		for obj := range targets {
 			if t := effectiveReceiver(obj); t != nil {
+				methodStructType = t
 				methodRecvs = append(methodRecvs, t)
 				methodName = obj.Name()
+			}
+			if fn, ok := obj.(*types.Func); ok {
+				// TODO:
+				methodType = fn.Type()
 			}
 		}
 	}
@@ -608,6 +615,19 @@ func localReferences(pkg *cache.Package, targets map[types.Object]bool, correspo
 				report(mustLocation(pgf, id), false)
 			}
 		}
+		for curId := range pgf.Cursor.Preorder((*ast.CallExpr)(nil)) {
+			expr, ok := curId.Node().(*ast.CallExpr)
+			if !ok {
+				continue
+			}
+
+			if CallExprMatches(pkg, methodStructType, methodType, methodName, expr) {
+				loc := mustLocation(pgf, expr)
+				// event.Log(context.Background(), fmt.Sprintf("functionMatches %s", loc.URI))
+				report(loc, false)
+			}
+		}
+
 	}
 	return nil
 }
